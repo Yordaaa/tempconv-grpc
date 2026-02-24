@@ -1,62 +1,145 @@
-# TempConv (gRPC + Protocol Buffers) — Go backend, Flutter Web frontend, GKE-ready
+# TempConv gRPC Service
 
-This repo is a minimal temperature conversion app built **without REST**:
+This repository contains a minimal temperature conversion backend written in Go using gRPC/gRPC-Web, and a Flutter web frontend that communicates with it via gRPC-Web — no REST involved.
 
-- **Backend**: Go gRPC service (no DB; pure calculation)
-  - Exposes **real gRPC** on port `50051` (for native clients + load tests)
-  - Exposes **gRPC-Web** on port `8080` (for browser/Flutter web)
-- **Frontend**: Flutter Web app that calls the backend using **gRPC-Web**
-- **Containerization**: Docker (targets **linux/amd64** for GKE nodes)
-- **Kubernetes**: manifests to deploy to **GKE**
-- **Load testing**: `k6` gRPC test script (hits port `50051`)
+## Structure
 
-## Repo layout
+- `backend/` – Go gRPC service (exposes native gRPC on `:50051` and gRPC-Web on `:8080`)
+- `frontend/` – Flutter web application using gRPC-Web to call the backend
+- `proto/` – Shared Protobuf definitions used by both backend and frontend
+- `deploy/` – Kubernetes manifests for deployment on GKE
+- `loadtest/` – k6 load test script targeting the native gRPC port
+- `scripts/` – Helper scripts for code generation and setup
 
-- `proto/` — `.proto` definitions shared by backend + frontend
-- `backend/` — Go gRPC server + tests + Dockerfile
-- `frontend/` — Flutter web app + Dockerfile
-- `deploy/` — Kubernetes manifests (GKE-friendly)
-- `loadtest/` — k6 load tests
+## Backend (Go)
 
-## High-level flow (why 2 ports?)
+### Getting started
 
-Browsers cannot use “native” HTTP/2 gRPC directly. Flutter Web therefore uses **gRPC-Web**.
-To keep load testing and non-browser clients simple, the backend also exposes a standard gRPC port.
+```bash
+cd backend
+go mod tidy
+go test ./...  # run unit tests
+```
 
-## Prereqs
+### gRPC Ports
 
-You said these are already installed:
+| Port    | Protocol   | Used by                        |
+|---------|------------|--------------------------------|
+| `50051` | gRPC       | Native clients, k6 load tests  |
+| `8080`  | gRPC-Web   | Flutter Web (browser clients)  |
 
-- Docker
-- kubectl
-- Google Cloud SDK + `gke-gcloud-auth-plugin`
-- k6
+> Browsers cannot use native HTTP/2 gRPC directly. The backend exposes both ports to support both use cases.
 
-### About Go/Flutter/protoc
+### Build and run
 
-This repo is set up so you can do **builds and code generation using Docker**, even if `go`, `flutter`, or `protoc` are not on your PATH in a given terminal/editor session.
+```bash
+go build -o tempconv-backend ./
+./tempconv-backend
+```
 
-If you prefer local tooling, you’ll also need:
+### Containerization
 
+A `Dockerfile` is provided; build with:
+
+```bash
+docker build -t tempconv-backend backend/
+```
+
+## Frontend (Flutter Web)
+
+The frontend calls the backend using **gRPC-Web** generated from the shared `.proto` file.
+
+```bash
+cd frontend
+flutter pub get
+flutter build web
+```
+
+Dockerize using a multi-stage build (build in `flutter` image, serve via nginx).
+
+```bash
+docker build -t tempconv-frontend frontend/
+```
+
+## Local Quickstart (Docker Compose)
+
+Run the full stack locally:
+
+```bash
+docker compose up --build
+```
+
+| Service             | URL                        |
+|---------------------|----------------------------|
+| Frontend            | http://localhost:8081       |
+| Backend gRPC-Web    | http://localhost:8080       |
+| Backend gRPC native | localhost:50051             |
+
+## Protobuf Code Generation
+
+Shared `.proto` definitions live in `proto/tempconv/v1/tempconv.proto`.
+
+Generate Go and Dart code using Docker (no local `protoc` needed):
+
+```bash
+./scripts/gen-go.ps1      # generates Go stubs in backend/
+./scripts/gen-dart.ps1    # generates Dart stubs in frontend/
+```
+
+If you prefer local tooling, install:
 - `protoc`
 - Go plugins: `protoc-gen-go`, `protoc-gen-go-grpc`
 - Dart plugin: `protoc_plugin`
 
-We’ll generate code for Go and Dart from the same `proto/tempconv/v1/tempconv.proto`.
+## Kubernetes / GKE
 
-## Quickstart (local)
+1. Install `gcloud`, `kubectl`, and ensure `gcloud` is authenticated.
 
-Run everything with Docker:
+2. Create a GKE cluster (AMD64 nodes):
+   ```bash
+   gcloud container clusters create tempconv-cluster \
+     --zone=us-central1-c --num-nodes=3 --machine-type=e2-medium
+   ```
 
-```powershell
-docker compose up --build
+3. Get credentials:
+   ```bash
+   gcloud container clusters get-credentials tempconv-cluster --zone us-central1-c
+   ```
+
+4. Build and push images to Google Container Registry (GCR):
+   ```bash
+   gcloud builds submit --tag gcr.io/$PROJECT_ID/tempconv-backend:latest ./backend
+   gcloud builds submit --tag gcr.io/$PROJECT_ID/tempconv-frontend:latest ./frontend
+   ```
+
+5. Apply manifests:
+   ```bash
+   kubectl apply -f deploy/backend-deployment.yaml
+   kubectl apply -f deploy/frontend-deployment.yaml
+   kubectl apply -f deploy/backend-service.yaml
+   kubectl apply -f deploy/frontend-service.yaml
+   ```
+
+6. After services are provisioned, note the external IP of the frontend service and use it to access the web app.
+
+## Load Testing
+
+Run the k6 script against the native gRPC port:
+
+```bash
+k6 run loadtest/tempconv-test.js
 ```
 
-- Frontend: `http://localhost:8081`
-- Backend gRPC-Web: `http://localhost:8080`
-- Backend gRPC (native): `localhost:50051`
+> The load test targets port `50051` directly using native gRPC.
 
-## Full guide
+## Testing on AMD64 GKE Nodes
 
-See `docs/STEP_BY_STEP.md`.
+GKE default nodes are amd64, which matches the Go binary built without CGO. Docker images are built targeting `linux/amd64`.
 
+## CI/CD
+
+Add a GitHub Actions workflow to build, test, and push images whenever code is pushed to the `main` branch. (Not yet included.)
+
+---
+
+Follow the step-by-step sections above to iteratively implement features, containerize, and deploy.
