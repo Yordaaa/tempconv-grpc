@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package tempconv.v1;
+
+option go_package = "tempconv-grpc/backend/gen/tempconv/v1;tempconvv1";
+
+// TempConv provides basic temperature conversions.
+service TempConvService {
+  // Convert Celsius to Fahrenheit.
+  rpc CelsiusToFahrenheit(TemperatureRequest) returns (TemperatureReply);
+
+  // Convert Fahrenheit to Celsius.
+  rpc FahrenheitToCelsius(TemperatureRequest) returns (TemperatureReply);
+}
+
+message TemperatureRequest {
+  // Input value in the source unit for the RPC.
+  double value = 1;
+}
+
+message TemperatureReply {
+  // Output value in the target unit for the RPC.
+  double value = 1;
+}
+

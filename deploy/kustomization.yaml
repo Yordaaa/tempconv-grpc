@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tempconv
+
+resources:
+  - namespace.yaml
+  - backend-deployment.yaml
+  - backend-service.yaml
+  - backend-grpcweb-lb.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
+
+# Edit these to point at your Artifact Registry images.
+images:
+  - name: tempconv-backend
+    newName: europe-west1-docker.pkg.dev/decent-rig-485913-t0/tempconv/tempconv-backend
+    newTag: v1
+  - name: tempconv-frontend
+    newName: europe-west1-docker.pkg.dev/decent-rig-485913-t0/tempconv/tempconv-frontend
+    newTag: v1
+
+

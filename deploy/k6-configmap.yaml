@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempconv-k6
+data:
+  tempconv.proto: |
+    syntax = "proto3";
+
+    package tempconv.v1;
+
+    option go_package = "tempconv-grpc/backend/gen/tempconv/v1;tempconvv1";
+
+    // TempConv provides basic temperature conversions.
+    service TempConvService {
+      // Convert Celsius to Fahrenheit.
+      rpc CelsiusToFahrenheit(TemperatureRequest) returns (TemperatureReply);
+
+      // Convert Fahrenheit to Celsius.
+      rpc FahrenheitToCelsius(TemperatureRequest) returns (TemperatureReply);
+    }
+
+    message TemperatureRequest {
+      // Input value in the source unit for the RPC.
+      double value = 1;
+    }
+
+    message TemperatureReply {
+      // Output value in the target unit for the RPC.
+      double value = 1;
+    }
+  loadtest.js: |
+    import { check, sleep } from 'k6';
+    import grpc from 'k6/net/grpc';
+
+    export const options = {
+      vus: Number(__ENV.VUS || 50),
+      duration: __ENV.DURATION || '30s',
+    };
+
+    const client = new grpc.Client();
+    client.load(['/proto'], 'tempconv.proto');
+
+    export default () => {
+      const target = __ENV.TARGET || 'tempconv-backend.tempconv.svc.cluster.local:50051';
+      client.connect(target, { plaintext: true });
+
+      const res = client.invoke('tempconv.v1.TempConvService/CelsiusToFahrenheit', { value: 100 });
+      check(res, {
+        'status is OK': (r) => r && r.status === grpc.StatusOK,
+        'value is 212': (r) => r && r.message && Math.abs(r.message.value - 212) < 1e-9,
+      });
+
+      client.close();
+      sleep(0.1);
+    };
+

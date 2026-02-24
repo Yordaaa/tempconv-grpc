@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tempconv-k6
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: tempconv-k6
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: k6
+          image: grafana/k6:latest
+          args: ["run", "/scripts/loadtest.js"]
+          env:
+            - name: TARGET
+              value: "tempconv-backend.tempconv.svc.cluster.local:50051"
+            - name: VUS
+              value: "200"
+            - name: DURATION
+              value: "60s"
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: proto
+              mountPath: /proto
+      volumes:
+        - name: scripts
+          configMap:
+            name: tempconv-k6
+            items:
+              - key: loadtest.js
+                path: loadtest.js
+        - name: proto
+          configMap:
+            name: tempconv-k6
+            items:
+              - key: tempconv.proto
+                path: tempconv.proto
+

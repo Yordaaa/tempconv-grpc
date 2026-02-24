@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempconv-backend-grpcweb
+  labels:
+    app: tempconv-backend
+spec:
+  type: LoadBalancer
+  selector:
+    app: tempconv-backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: grpcweb
+

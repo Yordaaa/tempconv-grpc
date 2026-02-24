@@ -1,0 +1,14 @@
+.git
+.idea
+.vscode
+
+# Flutter build artifacts
+frontend/app/build
+frontend/app/.dart_tool
+frontend/app/.pub-cache
+
+# Go build artifacts
+backend/bin
+backend/*.out
+backend/*.test
+
